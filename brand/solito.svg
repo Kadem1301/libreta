@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Solito">
+  <rect width="512" height="512" rx="112" fill="#16865B"/>
+  <g id="pig">
+    <!-- cola rizada -->
+    <path d="M122 262c-30-4-46-24-38-44 6-15 26-16 30-3 3 9-5 15-12 12" fill="none" stroke="#F6FFF9" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- patas -->
+    <path fill="#F6FFF9" d="M166 365h47v35c0 12-9 21-21 21h-8c-11 0-18-9-18-21zm159 0h47v35c0 12-9 21-21 21h-8c-11 0-18-9-18-21z"/>
+    <!-- cuerpo con oreja -->
+    <path fill="#F6FFF9" d="M118 262c0-80 58-141 138-141 40 0 75 14 101 39l31-27c8-7 20-3 21 8l4 49c20 23 32 52 32 83 0 74-61 132-145 132h-94c-72 0-88-60-88-143z"/>
+    <!-- hocico y ojo -->
+    <ellipse cx="402" cy="285" rx="31" ry="23" fill="#BCE8D0"/>
+    <ellipse cx="392" cy="284" rx="4.5" ry="6" fill="#16865B"/>
+    <ellipse cx="411" cy="284" rx="4.5" ry="6" fill="#16865B"/>
+    <circle cx="335" cy="222" r="8" fill="#173E31"/>
+    <!-- ranura de monedas sobre el lomo -->
+    <rect x="226" y="136" width="70" height="13" rx="6.5" fill="#16865B"/>
+    <!-- dólar -->
+    <path d="M267 185v14m0 128v14m35-121c-7-12-19-18-36-18-20 0-34 10-34 25 0 17 13 22 36 27l8 2c23 5 35 12 35 29 0 18-16 30-40 30-19 0-34-7-42-21" fill="none" stroke="#16865B" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

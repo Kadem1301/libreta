@@ -33,8 +33,19 @@ function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;
 
 function parseAmount(raw) {
   let s = String(raw || '').replace(/[^\d.,]/g, '');
-  if (s.includes('.') && s.includes(',')) s = s.replace(/,/g, '');
-  else s = s.replace(',', '.');
+  const lastDot = s.lastIndexOf('.'), lastComma = s.lastIndexOf(',');
+  if (lastDot >= 0 && lastComma >= 0) {
+    // Con ambos signos, el último es el decimal y el otro separa miles: 1,234.50 o 1.234,50
+    const dec = lastDot > lastComma ? '.' : ',';
+    s = s.split(dec === '.' ? ',' : '.').join('').replace(dec, '.');
+  } else if (lastDot >= 0 || lastComma >= 0) {
+    const sep = lastDot >= 0 ? '.' : ',';
+    const parts = s.split(sep);
+    const last = parts[parts.length - 1];
+    // Varias veces el mismo signo, o exactamente 3 dígitos después (1,234 / 2.500), es separador de miles.
+    const thousands = parts.length > 2 || (last.length === 3 && parts[0] !== '' && parts[0] !== '0');
+    s = thousands ? parts.join('') : parts.join('.');
+  }
   const n = Math.round(parseFloat(s) * 100) / 100;
   return Number.isFinite(n) ? n : NaN;
 }
@@ -92,6 +103,7 @@ function openSheet(el, focusEl) {
   if (openSheetEl && openSheetEl !== el) closeSheet(true);
   sheetReturnFocus = sheetReturnFocus || document.activeElement;
   openSheetEl = el;
+  $('app').inert = true;
   $('scrim').hidden = false; el.hidden = false;
   requestAnimationFrame(() => { $('scrim').classList.add('open'); el.classList.add('open'); });
   if (focusEl) focusEl.focus({ preventScroll: true });
@@ -101,7 +113,7 @@ function closeSheet(swap) {
   if (!el) return;
   openSheetEl = null;
   el.classList.remove('open');
-  if (!swap) $('scrim').classList.remove('open');
+  if (!swap) { $('scrim').classList.remove('open'); $('app').inert = false; }
   setTimeout(() => {
     el.hidden = true;
     if (!openSheetEl) $('scrim').hidden = true;
@@ -427,9 +439,16 @@ document.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click'
 async function changeMonth(delta) {
   const next = addMonths(state.month, delta);
   if (next > firstOfMonth(new Date())) return;
+  const prev = state.month;
   state.month = next;
   renderMonthNav();
-  try { await loadTxns(); } catch (err) { toast(friendlyError(err)); }
+  try { await loadTxns(); } catch (err) {
+    // Si no cargó, se vuelve al mes anterior para no mostrar sus datos bajo el mes nuevo.
+    state.month = prev;
+    renderMonthNav();
+    toast(friendlyError(err));
+    return;
+  }
   renderAll();
 }
 $('prevMonth').addEventListener('click', () => changeMonth(-1));
@@ -695,7 +714,7 @@ async function exportExcel(all) {
       Nota: t.note || '',
       'Monto (S/)': (t.kind === 'income' ? 1 : -1) * +t.amount,
     }));
-    const name = all ? 'libreta-todo' : `libreta-${monthKey(state.month)}`;
+    const name = all ? 'solito-todo' : `solito-${monthKey(state.month)}`;
     try {
       const XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
       const ws = XLSX.utils.json_to_sheet(rows);

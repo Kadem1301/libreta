@@ -1,4 +1,4 @@
-# Libreta · gastos personales
+# Solito · gastos personales
 
 App web instalable (PWA) para registrar gastos e ingresos en soles, con cuentas por usuario sobre Supabase.
 

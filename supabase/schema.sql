@@ -1,4 +1,4 @@
--- Libreta · esquema de base de datos (Supabase / Postgres)
+-- Solito · esquema de base de datos (Supabase / Postgres)
 -- Se corre una sola vez en el SQL Editor del proyecto (o como migración).
 -- Cada usuario solo ve y modifica sus propios datos (Row Level Security).
 
@@ -109,3 +109,21 @@ create trigger on_auth_user_created after insert on auth.users
 -- Las funciones de trigger no deben poder llamarse como RPC desde la API.
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 revoke execute on function public.touch_updated_at() from public, anon, authenticated;
+
+-- ───────────── Una categoría solo puede ser del mismo dueño del movimiento ─────────────
+-- La FK sola aceptaría el id de una categoría ajena; este trigger lo impide.
+create or replace function public.check_txn_category_owner() returns trigger
+language plpgsql security invoker set search_path = '' as $$
+begin
+  if new.category_id is not null and not exists (
+    select 1 from public.categories c where c.id = new.category_id and c.user_id = new.user_id
+  ) then
+    raise exception 'La categoría no pertenece al usuario' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists transactions_category_owner on public.transactions;
+create trigger transactions_category_owner
+  before insert or update of category_id, user_id on public.transactions
+  for each row execute function public.check_txn_category_owner();
