@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="es-PE">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Libreta</title>
+  <meta name="description" content="Tus gastos e ingresos del mes, en tu celular.">
+  <meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Libreta">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/app.css">
+  <script>
+    // Aplica la apariencia guardada antes de pintar, para evitar el parpadeo.
+    try { var a = localStorage.getItem('libreta-appearance'); if (a === 'light' || a === 'dark') document.documentElement.dataset.theme = a; } catch (e) {}
+    // Se lee aquí porque Supabase limpia el hash de la URL al iniciar.
+    window.__LIBRETA_RECOVERY = /type=recovery/.test(location.hash);
+  </script>
+</head>
+<body>
+  <div class="boot" id="boot" aria-live="polite"><div class="spinner" aria-hidden="true"></div><span class="sr-only">Cargando…</span></div>
+
+  <!-- ─────────── Acceso ─────────── -->
+  <main class="auth" id="authScreen" hidden>
+    <div class="auth-inner">
+      <div class="auth-logo" aria-hidden="true"><span class="icon" data-icon="wallet"></span></div>
+      <h1 class="auth-title">Libreta</h1>
+      <p class="auth-lede">Tus gastos e ingresos del mes, claros y en tu bolsillo.</p>
+
+      <div class="segmented seg-2" role="tablist" aria-label="Acceso">
+        <button type="button" role="tab" class="seg-btn" id="tabLogin" aria-selected="true">Ingresar</button>
+        <button type="button" role="tab" class="seg-btn" id="tabSignup" aria-selected="false">Crear cuenta</button>
+      </div>
+
+      <form id="authForm" class="form" novalidate>
+        <div class="field" id="nameField" hidden>
+          <label for="authName">Nombre</label>
+          <input type="text" id="authName" autocomplete="name" placeholder="¿Cómo te llamamos?">
+        </div>
+        <div class="field">
+          <label for="authEmail">Correo</label>
+          <input type="email" id="authEmail" autocomplete="email" inputmode="email" placeholder="tu@correo.com" required>
+        </div>
+        <div class="field" id="passField">
+          <label for="authPass">Contraseña</label>
+          <input type="password" id="authPass" autocomplete="current-password" placeholder="Mínimo 6 caracteres" required minlength="6">
+        </div>
+        <p class="form-msg" id="authMsg" role="alert" hidden></p>
+        <button type="submit" class="btn-primary" id="authSubmit">Ingresar</button>
+        <button type="button" class="link-btn center" id="forgotBtn">¿Olvidaste tu contraseña?</button>
+      </form>
+      <p class="demo-note" id="demoNote" hidden>Modo demo: los datos se guardan solo en este navegador. Cualquier correo y contraseña funcionan.</p>
+    </div>
+  </main>
+
+  <!-- ─────────── Nueva contraseña (link de recuperación) ─────────── -->
+  <main class="auth" id="recoveryScreen" hidden>
+    <div class="auth-inner">
+      <div class="auth-logo" aria-hidden="true"><span class="icon" data-icon="lock"></span></div>
+      <h1 class="auth-title">Nueva contraseña</h1>
+      <form id="recoveryForm" class="form" novalidate>
+        <div class="field">
+          <label for="newPass">Contraseña nueva</label>
+          <input type="password" id="newPass" autocomplete="new-password" minlength="6" placeholder="Mínimo 6 caracteres">
+        </div>
+        <p class="form-msg" id="recoveryMsg" role="alert" hidden></p>
+        <button type="submit" class="btn-primary">Guardar contraseña</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- ─────────── App ─────────── -->
+  <div class="app" id="app" hidden>
+    <header class="topbar">
+      <div class="month-nav" id="monthNav">
+        <button type="button" class="icon-btn ghost" id="prevMonth" aria-label="Mes anterior"><span class="icon" data-icon="chevronLeft"></span></button>
+        <span class="month-label" id="monthLabel" aria-live="polite"></span>
+        <button type="button" class="icon-btn ghost" id="nextMonth" aria-label="Mes siguiente"><span class="icon" data-icon="chevronRight"></span></button>
+      </div>
+      <h1 class="screen-title" id="screenTitle" tabindex="-1">Inicio</h1>
+    </header>
+
+    <main class="content">
+      <!-- Inicio -->
+      <section class="tab-panel" id="tab-home" aria-labelledby="screenTitle">
+        <div class="balance-card">
+          <p class="balance-label">Saldo del mes</p>
+          <p class="balance-amount" id="balanceAmount">S/ 0.00</p>
+          <div class="balance-sub">
+            <span class="pill is-income"><span class="icon" data-icon="arrowUp"></span><span id="incomeAmount">S/ 0.00</span></span>
+            <span class="pill is-expense"><span class="icon" data-icon="arrowDown"></span><span id="expenseAmount">S/ 0.00</span></span>
+          </div>
+        </div>
+
+        <button type="button" class="card budget-card" id="budgetCard">
+          <div class="card-head">
+            <h2 class="card-title">Presupuesto</h2>
+            <span class="muted small" id="budgetOf"></span>
+          </div>
+          <div class="progress"><div class="progress-fill" id="budgetFill"></div></div>
+          <p class="budget-note" id="budgetNote"></p>
+        </button>
+
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title">Gastos por categoría</h2>
+            <button type="button" class="link-btn" data-goto="stats">Ver todo</button>
+          </div>
+          <div class="donut-wrap">
+            <div class="donut-ring" id="donutRing">
+              <div class="donut-hole"><span class="donut-total-label">Total</span><span class="donut-total" id="donutTotal">S/ 0</span></div>
+            </div>
+            <ul class="legend-list" id="legendList"></ul>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title">Recientes</h2>
+            <button type="button" class="link-btn" data-goto="txns">Ver todos</button>
+          </div>
+          <ul class="txn-groups" id="recentList"></ul>
+        </div>
+      </section>
+
+      <!-- Movimientos -->
+      <section class="tab-panel" id="tab-txns" hidden aria-labelledby="screenTitle">
+        <div class="search">
+          <span class="icon" data-icon="search"></span>
+          <input type="search" id="searchInput" placeholder="Buscar comercio o nota" aria-label="Buscar movimientos">
+        </div>
+        <div class="segmented seg-3" role="radiogroup" aria-label="Tipo">
+          <button type="button" class="seg-btn" data-kind="all" aria-pressed="true">Todos</button>
+          <button type="button" class="seg-btn" data-kind="expense" aria-pressed="false">Gastos</button>
+          <button type="button" class="seg-btn" data-kind="income" aria-pressed="false">Ingresos</button>
+        </div>
+        <div class="chip-row" id="catFilter" aria-label="Filtrar por categoría"></div>
+        <div class="card flush">
+          <ul class="txn-groups" id="txnList"></ul>
+        </div>
+      </section>
+
+      <!-- Resumen -->
+      <section class="tab-panel" id="tab-stats" hidden aria-labelledby="screenTitle">
+        <div class="kpi-row">
+          <div class="kpi"><span class="kpi-label">Ahorro del mes</span><span class="kpi-value" id="kpiSaving">—</span></div>
+          <div class="kpi"><span class="kpi-label">Gasto por día</span><span class="kpi-value" id="kpiDaily">—</span></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2 class="card-title">Gasto de los últimos 6 meses</h2></div>
+          <div class="trend-chart" id="trendChart"></div>
+          <p class="muted small" id="trendNote"></p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2 class="card-title">Por categoría</h2></div>
+          <ul class="stat-cat-list" id="statsCategoryList"></ul>
+        </div>
+      </section>
+
+      <!-- Perfil -->
+      <section class="tab-panel" id="tab-profile" hidden aria-labelledby="screenTitle">
+        <div class="card profile-card">
+          <div class="avatar avatar-lg" id="avatarLg" aria-hidden="true"></div>
+          <div class="profile-text">
+            <p class="profile-name" id="profileName"></p>
+            <p class="profile-email" id="profileEmail"></p>
+          </div>
+          <span class="badge" id="planBadge">Gratis</span>
+        </div>
+
+        <p class="settings-header">Cuenta</p>
+        <ul class="settings-list">
+          <li><button type="button" class="settings-row-btn" id="editNameBtn"><span>Nombre</span><span class="settings-right"><span id="nameValue"></span><span class="icon" data-icon="chevronRight"></span></span></button></li>
+          <li><button type="button" class="settings-row-btn" id="budgetBtn"><span>Presupuesto mensual</span><span class="settings-right"><span id="budgetValue"></span><span class="icon" data-icon="chevronRight"></span></span></button></li>
+          <li><button type="button" class="settings-row-btn" id="catsBtn"><span>Categorías</span><span class="settings-right"><span id="catsCount"></span><span class="icon" data-icon="chevronRight"></span></span></button></li>
+        </ul>
+
+        <p class="settings-header">Apariencia</p>
+        <ul class="settings-list">
+          <li class="settings-row">
+            <div class="segmented seg-3 full" role="radiogroup" aria-label="Apariencia">
+              <button type="button" class="seg-btn" data-appearance="auto" aria-pressed="true">Auto</button>
+              <button type="button" class="seg-btn" data-appearance="light" aria-pressed="false">Claro</button>
+              <button type="button" class="seg-btn" data-appearance="dark" aria-pressed="false">Oscuro</button>
+            </div>
+          </li>
+        </ul>
+
+        <p class="settings-header">Tus datos</p>
+        <ul class="settings-list">
+          <li><button type="button" class="settings-row-btn" id="exportMonthBtn"><span>Exportar este mes a Excel</span><span class="settings-right"><span class="icon" data-icon="download"></span></span></button></li>
+          <li><button type="button" class="settings-row-btn" id="exportAllBtn"><span>Exportar todo a Excel</span><span class="settings-right"><span class="icon" data-icon="download"></span></span></button></li>
+        </ul>
+
+        <div class="premium-card">
+          <div class="premium-head"><span class="icon" data-icon="star"></span><span>Libreta Premium</span><span class="badge soon">Próximamente</span></div>
+          <ul class="premium-list">
+            <li><span class="icon" data-icon="mail"></span>Lee los correos de tu banco y registra tus gastos solo.</li>
+            <li><span class="icon" data-icon="chat"></span>Te avisa por WhatsApp cada gasto que se registra.</li>
+          </ul>
+        </div>
+
+        <ul class="settings-list">
+          <li><button type="button" class="settings-row-btn center danger-text" id="logoutBtn">Cerrar sesión</button></li>
+        </ul>
+        <p class="muted small center" id="versionNote">Libreta v1.0</p>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Navegación principal">
+      <button type="button" class="nav-btn" data-tab="home" aria-current="page"><span class="nav-icon icon" data-icon="home"></span><span class="nav-label">Inicio</span></button>
+      <button type="button" class="nav-btn" data-tab="txns"><span class="nav-icon icon" data-icon="list"></span><span class="nav-label">Movimientos</span></button>
+      <button type="button" class="fab" id="fabAdd" aria-label="Agregar movimiento"><span class="icon" data-icon="plus"></span></button>
+      <button type="button" class="nav-btn" data-tab="stats"><span class="nav-icon icon" data-icon="chart"></span><span class="nav-label">Resumen</span></button>
+      <button type="button" class="nav-btn" data-tab="profile"><span class="nav-icon icon" data-icon="user"></span><span class="nav-label">Perfil</span></button>
+    </nav>
+  </div>
+
+  <!-- ─────────── Hojas (bottom sheets) ─────────── -->
+  <div class="scrim" id="scrim" hidden></div>
+
+  <div class="sheet" id="txnSheet" role="dialog" aria-modal="true" aria-labelledby="txnSheetTitle" hidden>
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <div class="sheet-head">
+      <h2 class="sheet-title" id="txnSheetTitle">Nuevo movimiento</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Cerrar"><span class="icon" data-icon="close"></span></button>
+    </div>
+    <form id="txnForm" class="form" novalidate>
+      <div class="segmented seg-2" role="radiogroup" aria-label="Tipo de movimiento">
+        <button type="button" class="seg-btn" data-txkind="expense" aria-pressed="true">Gasto</button>
+        <button type="button" class="seg-btn" data-txkind="income" aria-pressed="false">Ingreso</button>
+      </div>
+      <div class="field">
+        <label for="amountInput">Monto</label>
+        <div class="amount-wrap">
+          <span class="currency-prefix" aria-hidden="true">S/</span>
+          <input type="text" inputmode="decimal" id="amountInput" placeholder="0.00" autocomplete="off" aria-describedby="errAmount">
+        </div>
+        <p class="error-text" id="errAmount" hidden></p>
+      </div>
+      <div class="field">
+        <span class="field-legend" id="catLegend">Categoría</span>
+        <div class="cat-grid" id="catGrid" role="radiogroup" aria-labelledby="catLegend"></div>
+      </div>
+      <div class="field">
+        <label for="merchantInput">Comercio o descripción</label>
+        <input type="text" id="merchantInput" maxlength="80" placeholder="Ej. Mercado San Camilo" aria-describedby="errMerchant" autocomplete="off">
+        <p class="error-text" id="errMerchant" hidden></p>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="dateInput">Fecha</label>
+          <input type="date" id="dateInput">
+        </div>
+        <div class="field">
+          <label for="timeInput">Hora</label>
+          <input type="time" id="timeInput">
+        </div>
+      </div>
+      <div class="field">
+        <label for="noteInput">Nota <span class="muted">(opcional)</span></label>
+        <input type="text" id="noteInput" maxlength="140" placeholder="Ej. Almuerzo con el equipo" autocomplete="off">
+      </div>
+      <button type="submit" class="btn-primary" id="txnSubmit">Guardar</button>
+      <button type="button" class="btn-danger" id="txnDelete" hidden>Eliminar movimiento</button>
+    </form>
+  </div>
+
+  <div class="sheet" id="valueSheet" role="dialog" aria-modal="true" aria-labelledby="valueSheetTitle" hidden>
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <div class="sheet-head">
+      <h2 class="sheet-title" id="valueSheetTitle"></h2>
+      <button type="button" class="icon-btn" data-close aria-label="Cerrar"><span class="icon" data-icon="close"></span></button>
+    </div>
+    <form id="valueForm" class="form" novalidate>
+      <div class="field">
+        <label for="valueInput" id="valueLabel"></label>
+        <input type="text" id="valueInput" autocomplete="off">
+        <p class="error-text" id="errValue" hidden></p>
+      </div>
+      <button type="submit" class="btn-primary">Guardar</button>
+    </form>
+  </div>
+
+  <div class="sheet" id="catsSheet" role="dialog" aria-modal="true" aria-labelledby="catsSheetTitle" hidden>
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <div class="sheet-head">
+      <h2 class="sheet-title" id="catsSheetTitle">Categorías</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Cerrar"><span class="icon" data-icon="close"></span></button>
+    </div>
+    <div class="segmented seg-2" role="radiogroup" aria-label="Tipo de categoría">
+      <button type="button" class="seg-btn" data-catkind="expense" aria-pressed="true">Gastos</button>
+      <button type="button" class="seg-btn" data-catkind="income" aria-pressed="false">Ingresos</button>
+    </div>
+    <ul class="settings-list cat-manage" id="catManageList"></ul>
+    <button type="button" class="btn-secondary" id="newCatBtn"><span class="icon" data-icon="plus"></span> Nueva categoría</button>
+  </div>
+
+  <div class="sheet" id="catEditSheet" role="dialog" aria-modal="true" aria-labelledby="catEditTitle" hidden>
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <div class="sheet-head">
+      <h2 class="sheet-title" id="catEditTitle">Categoría</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Cerrar"><span class="icon" data-icon="close"></span></button>
+    </div>
+    <form id="catForm" class="form" novalidate>
+      <div class="cat-preview"><span class="chip-icon" id="catPreview"></span></div>
+      <div class="field">
+        <label for="catName">Nombre</label>
+        <input type="text" id="catName" maxlength="40" autocomplete="off">
+        <p class="error-text" id="errCat" hidden></p>
+      </div>
+      <div class="field">
+        <span class="field-legend">Color</span>
+        <div class="swatches" id="colorPicker"></div>
+      </div>
+      <div class="field">
+        <span class="field-legend">Ícono</span>
+        <div class="swatches icons" id="iconPicker"></div>
+      </div>
+      <label class="toggle-row" id="archivedRow">
+        <span>Ocultar categoría</span>
+        <span class="toggle-switch"><input type="checkbox" id="catArchived"><span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span></span>
+      </label>
+      <button type="submit" class="btn-primary">Guardar</button>
+    </form>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
