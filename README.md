@@ -20,6 +20,8 @@ App web instalable (PWA) para registrar gastos e ingresos en soles, con cuentas 
 
 ## Conectar Supabase
 
+Ya conectado al proyecto `libreta` (ref `jcxswdzvtvrtamiwsfdj`, São Paulo). Pasos, por si hay que rehacerlo:
+
 1. Crear un proyecto en Supabase (región São Paulo, la más cercana a Lima).
 2. SQL Editor → pegar y correr `supabase/schema.sql`.
 3. Authentication → URL Configuration: *Site URL* = URL de GitHub Pages, y agregarla también en *Redirect URLs*.

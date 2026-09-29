@@ -43,6 +43,7 @@ create table if not exists public.transactions (
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
+create index if not exists transactions_category_idx on public.transactions(category_id);
 create index if not exists transactions_user_date_idx on public.transactions(user_id, occurred_on desc);
 create unique index if not exists transactions_external_uidx
   on public.transactions(user_id, source, external_id) where external_id is not null;
@@ -73,8 +74,11 @@ drop policy if exists "movimientos propios" on public.transactions;
 create policy "movimientos propios" on public.transactions for all to authenticated
   using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 
--- El plan (free/premium) no lo puede cambiar el propio usuario desde la app.
-revoke update (plan) on public.profiles from authenticated;
+-- El usuario solo puede editar estas columnas de su perfil: el plan (free/premium)
+-- no lo cambia desde la app. (Un revoke por columna no basta porque Supabase da
+-- UPDATE sobre toda la tabla; se quita ese permiso y se concede columna por columna.)
+revoke update on public.profiles from anon, authenticated;
+grant update (full_name, currency, monthly_budget, whatsapp_phone) on public.profiles to authenticated;
 
 -- ───────────── Alta de usuario: perfil + categorías base ─────────────
 create or replace function public.handle_new_user() returns trigger
@@ -101,3 +105,7 @@ end $$;
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- Las funciones de trigger no deben poder llamarse como RPC desde la API.
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+revoke execute on function public.touch_updated_at() from public, anon, authenticated;

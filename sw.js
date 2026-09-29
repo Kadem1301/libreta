@@ -1,6 +1,6 @@
 // Service worker: guarda la "cáscara" de la app para que abra rápido y sin señal.
 // Los datos (Supabase) siempre van por red; solo se cachean archivos propios.
-const CACHE = 'libreta-v1';
+const CACHE = 'libreta-v2';
 const SHELL = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/store.js', 'js/icons.js', 'js/config.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 
