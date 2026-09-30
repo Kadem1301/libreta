@@ -127,3 +127,8 @@ drop trigger if exists transactions_category_owner on public.transactions;
 create trigger transactions_category_owner
   before insert or update of category_id, user_id on public.transactions
   for each row execute function public.check_txn_category_owner();
+
+revoke execute on function public.check_txn_category_owner() from public, anon, authenticated;
+
+-- Auditoría (debe dar 0): movimientos cuya categoría es de otro usuario.
+-- select count(*) from public.transactions t join public.categories c on c.id = t.category_id where c.user_id <> t.user_id;

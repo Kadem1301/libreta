@@ -112,7 +112,7 @@ function closeSheet(swap) {
   el.classList.remove('open');
   if (!swap) { $('scrim').classList.remove('open'); $('app').inert = false; }
   setTimeout(() => {
-    el.hidden = true;
+    if (openSheetEl !== el) el.hidden = true;   // si se reabrió en estos 300 ms, no se oculta
     if (!openSheetEl) $('scrim').hidden = true;
   }, 300);
   if (!swap && sheetReturnFocus) { sheetReturnFocus.focus?.({ preventScroll: true }); sheetReturnFocus = null; }
@@ -123,6 +123,9 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && openSheetE
 
 // ─────────────────────────── pantallas ───────────────────────────
 function show(screen) {
+  // Al salir de la app (cerrar sesión, expirar) no puede quedar una hoja abierta ni el fondo inerte.
+  if (screen !== 'app' && openSheetEl) closeSheet();
+  if (screen !== 'app') $('app').inert = false;
   $('boot').hidden = true;
   $('authScreen').hidden = screen !== 'auth';
   $('recoveryScreen').hidden = screen !== 'recovery';

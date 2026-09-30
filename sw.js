@@ -18,13 +18,16 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  const fromCache = exact => caches.match(e.request, { ignoreSearch: !exact });
   e.respondWith(
     fetch(e.request)
       .then(res => {
-        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
-        return res;
+        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return res; }
+        // 404/500 del servidor: se prefiere una copia buena de esa misma URL (coincidencia exacta, con su query)
+        // a la respuesta de error; sin copia exacta se devuelve el error tal cual.
+        return fromCache(true).then(r => r || res);
       })
-      .catch(() => caches.match(e.request, { ignoreSearch: true })
+      .catch(() => fromCache(false)
         .then(r => r || (e.request.mode === 'navigate' ? caches.match('index.html') : Response.error())))
   );
 });
