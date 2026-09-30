@@ -31,23 +31,20 @@ const numFmt0 = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 0 });
 function money(n, compact) { return 'S/ ' + (compact ? numFmt0 : numFmt).format(Math.abs(n)); }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
+// Acepta solo formatos bien formados (45, 12,5, 1,234, 1.234, 1,234.50, 1.234,50) y devuelve NaN
+// con el resto (1.2.3, 1,,2) para no guardar un monto distinto al que escribió la persona.
 function parseAmount(raw) {
-  let s = String(raw || '').replace(/[^\d.,]/g, '');
-  const lastDot = s.lastIndexOf('.'), lastComma = s.lastIndexOf(',');
-  if (lastDot >= 0 && lastComma >= 0) {
-    // Con ambos signos, el último es el decimal y el otro separa miles: 1,234.50 o 1.234,50
-    const dec = lastDot > lastComma ? '.' : ',';
-    s = s.split(dec === '.' ? ',' : '.').join('').replace(dec, '.');
-  } else if (lastDot >= 0 || lastComma >= 0) {
-    const sep = lastDot >= 0 ? '.' : ',';
-    const parts = s.split(sep);
-    const last = parts[parts.length - 1];
-    // Varias veces el mismo signo, o exactamente 3 dígitos después (1,234 / 2.500), es separador de miles.
-    const thousands = parts.length > 2 || (last.length === 3 && parts[0] !== '' && parts[0] !== '0');
-    s = thousands ? parts.join('') : parts.join('.');
-  }
-  const n = Math.round(parseFloat(s) * 100) / 100;
-  return Number.isFinite(n) ? n : NaN;
+  const s = String(raw || '').replace(/[^\d.,]/g, '');
+  let n;
+  if (/^\d+$/.test(s)) n = s;
+  else if (/^[1-9]\d{0,2}(?:,\d{3})+$/.test(s)) n = s.replace(/,/g, '');                    // 1,234
+  else if (/^[1-9]\d{0,2}(?:\.\d{3})+$/.test(s)) n = s.replace(/\./g, '');                  // 1.234
+  else if (/^[1-9]\d{0,2}(?:,\d{3})+\.\d+$/.test(s)) n = s.replace(/,/g, '');             // 1,234.50
+  else if (/^[1-9]\d{0,2}(?:\.\d{3})+,\d+$/.test(s)) n = s.replace(/\./g, '').replace(',', '.'); // 1.234,50
+  else if (/^\d*[.,]\d+$/.test(s)) n = s.replace(',', '.');                                  // 12,5 / 0.50
+  else return NaN;
+  const v = Math.round(parseFloat(n) * 100) / 100;
+  return Number.isFinite(v) ? v : NaN;
 }
 
 function dateLabel(str) {
@@ -201,15 +198,33 @@ $('recoveryForm').addEventListener('submit', async (e) => {
 const catById = (id) => state.categories.find(c => c.id === id);
 const monthTxns = () => state.txns.filter(t => t.occurred_on.startsWith(monthKey(state.month)));
 
-async function loadTxns() {
-  const from = ymd(addMonths(state.month, -5));
-  const to = ymd(lastOfMonth(state.month));
-  const list = await store.listTransactions(from, to);
+// Cada carga lleva un número; si llega una respuesta vieja (se cambió de mes otra vez), se descarta.
+let loadSeq = 0;
+// El mes elegido y su lista se confirman juntos: state.month solo cambia cuando ya llegaron sus datos.
+// targetMonth es el mes que se pidió y aún no se confirmó (null si no hay carga de cambio de mes en curso).
+let targetMonth = null;
+const wantedMonth = () => targetMonth || state.month;
+async function loadTxns(month = wantedMonth()) {
+  const seq = ++loadSeq;
+  const from = ymd(addMonths(month, -5));
+  const to = ymd(lastOfMonth(month));
+  let list;
+  try { list = await store.listTransactions(from, to); } catch (err) {
+    if (seq !== loadSeq) return false;      // falló una carga vieja: la más nueva decide qué mostrar
+    targetMonth = null;                      // falló la vigente: se abandona el mes pedido y se queda el confirmado
+    throw err;
+  }
+  if (seq !== loadSeq) return false;
   // Más reciente primero: por fecha, luego por hora del movimiento.
   state.txns = list.sort((a, b) => b.occurred_on.localeCompare(a.occurred_on)
     || String(b.occurred_at || '').localeCompare(String(a.occurred_at || ''))
     || String(b.created_at).localeCompare(String(a.created_at)));
+  state.month = month;
+  if (targetMonth && monthKey(targetMonth) === monthKey(month)) targetMonth = null;
+  return true;
 }
+// Recarga y pinta solo si esta carga sigue vigente; si llegó tarde, la más nueva se encarga de pintar.
+async function refresh() { if (await loadTxns()) renderAll(); }
 
 let bootedId = null;
 async function boot(user) {
@@ -437,19 +452,11 @@ document.querySelectorAll('.nav-btn[data-tab]').forEach(b => b.addEventListener(
 document.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.goto)));
 
 async function changeMonth(delta) {
-  const next = addMonths(state.month, delta);
+  const next = addMonths(wantedMonth(), delta);
   if (next > firstOfMonth(new Date())) return;
-  const prev = state.month;
-  state.month = next;
-  renderMonthNav();
-  try { await loadTxns(); } catch (err) {
-    // Si no cargó, se vuelve al mes anterior para no mostrar sus datos bajo el mes nuevo.
-    state.month = prev;
-    renderMonthNav();
-    toast(friendlyError(err));
-    return;
-  }
-  renderAll();
+  targetMonth = next;
+  // Si esta carga vigente falla, loadTxns ya soltó el mes pedido: la pantalla sigue en el mes anterior.
+  try { await refresh(); } catch (err) { toast(friendlyError(err)); }
 }
 $('prevMonth').addEventListener('click', () => changeMonth(-1));
 $('nextMonth').addEventListener('click', () => changeMonth(1));
@@ -555,8 +562,7 @@ $('txnForm').addEventListener('submit', async (e) => {
   const btn = $('txnSubmit'); btn.disabled = true;
   try {
     await store.saveTransaction(row);
-    await loadTxns();
-    renderAll();
+    await refresh();
     closeSheet();
     const d = new Date(row.occurred_on + 'T00:00:00');
     const inView = monthKey(d) === monthKey(state.month);
@@ -578,11 +584,11 @@ $('txnDelete').addEventListener('click', async () => {
   const t = editing;
   try {
     await store.deleteTransaction(t.id);
-    await loadTxns(); renderAll(); closeSheet();
+    await refresh(); closeSheet();
     const { id, created_at, updated_at, user_id, ...rest } = t;
     toast('Movimiento eliminado.', {
       label: 'Deshacer',
-      run: async () => { try { await store.saveTransaction(rest); await loadTxns(); renderAll(); } catch (err) { toast(friendlyError(err)); } },
+      run: async () => { try { await store.saveTransaction(rest); await refresh(); } catch (err) { toast(friendlyError(err)); } },
     });
   } catch (err) { toast(friendlyError(err)); }
 });
